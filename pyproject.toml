@@ -27,7 +27,7 @@ packages = ["src/library_acquisitions"]
 
 [project.scripts]
 alma-create-pols = "library_acquisitions.alma_create_po_line:main"
-marc-to-json = "library_acquisitions.marc_to_json:main"
+jlg-marc-to-json = "library_acquisitions.jlg_marc_to_json:main"
 amazon-pol-creator = "library_acquisitions.amazon_pol_creator:main"
 generic-pol-creator = "library_acquisitions.generic_pol_creator:main"
 

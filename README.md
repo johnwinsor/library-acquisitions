@@ -4,7 +4,9 @@
    - git clone git@github.com:johnwinsor/library-acquisitions.git
 2. Install dependencies
    - uv sync
-3. Create .env in src/library_acquisitions
+3. Activate virtual environment
+   - `source .venv/bin/activate`
+4. Create .env in src/library_acquisitions
     # Alma API Configuration
     # Replace with your actual API key from Ex Libris Developer Network
     ALMA_API_KEY=XXXXXXXXXXXXXXXXXXXXX
@@ -42,3 +44,19 @@ library-acquisitions/           # Kebab-case for project root
 │       ├── alma_create_po_line.py
 │       ├── amazon_pol_creator.py
 └── docs/
+└── tests/
+
+## Alma PO Creation Processes
+
+1. Amazon Orders
+2. Generic Vendors (credit card orders)
+   - Place order at vendor Website and print order summary or confimation.
+   - Look up titles in OCLC WorldCat (https://search.worldcat.org/). Note OCLC numbers on order summary
+   - Create new vendor in Alma if necessary
+   - Create new working folder for order in other_orders/
+     - Name after the vendor and append the date (hacky-labs_20250820)
+   - `uv run generic-pol-creator`
+3. JLG Shipments
+4. EBSCO Renewals
+
+## Alma/Workday Invoicing
