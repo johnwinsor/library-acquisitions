@@ -18,3 +18,27 @@
     # WorldCat API Credentials
     WORLDCAT_API_KEY=xxxxxxxxxxxxxxxxxxxxx
     WORLDCAT_API_SECRET=xxxxxxxxxxxxxxxxxx
+
+## Project Structure
+
+library-acquisitions/           # Kebab-case for project root
+├── .venv
+├── amazon_orders/
+│   └── 20250820/
+│   ├── 20250920/
+├── other_vendors/
+├── pyproject.toml
+├── uv.lock
+├── README.md
+├── src/
+│   └── library_acquisitions/   # Snake_case for Python package
+│       ├── __init__.py
+│       ├── .env
+│       ├── templates/
+│           └── generic_book_template.json
+│           ├── generic_films_template.json
+│       ├── generic_pol_creator.py
+│       ├── oclc_helpers.py
+│       ├── alma_create_po_line.py
+│       ├── amazon_pol_creator.py
+└── docs/
