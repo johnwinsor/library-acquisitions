@@ -14,11 +14,13 @@ import sys
 import glob
 from datetime import datetime, timedelta
 import re
-
+import requests
+from dotenv import load_dotenv
 import questionary
 from rich.console import Console
 from rich.table import Table
 from rich.panel import Panel
+from dataclasses import dataclass
 
 # Try to import OCLC helpers - graceful fallback if not available
 try:
@@ -26,6 +28,27 @@ try:
     OCLC_AVAILABLE = True
 except ImportError:
     OCLC_AVAILABLE = False
+    
+# Load environment variables from .env file
+load_dotenv()
+
+@dataclass
+class AlmaConfig:
+    api_key: str
+    base_url: str
+    
+    @classmethod
+    def from_env(cls):
+        """Load configuration from environment variables"""
+        api_key = os.getenv('ALMA_API_KEY')
+        base_url = os.getenv('ALMA_BASE_URL', 'https://api-na.hosted.exlibrisgroup.com')
+        
+        if not api_key:
+            print("❌ Error: ALMA_API_KEY environment variable not set!")
+            print("Please set ALMA_API_KEY in your .env file or environment")
+            sys.exit(1)
+        
+        return cls(api_key=api_key, base_url=base_url)
 
 console = Console()
 
@@ -150,7 +173,7 @@ def select_template(templates):
 # USER INPUT COLLECTION
 # =============================================================================
 
-def get_user_input():
+def get_user_input(config: AlmaConfig):
     """
     Collect basic bibliographic and order information from user.
     
@@ -305,7 +328,7 @@ def get_user_input():
         'oclc_number': used_oclc_number  # Include OCLC number if available
     }
 
-def get_receiving_note_categories():
+def get_receiving_note_categories(config: AlmaConfig):
     """
     Handle receiving note category selection with conditional data collection.
     
@@ -350,19 +373,52 @@ def get_receiving_note_categories():
     if "Interested User" in selected_categories:
         console.print("\n🔹 Interested User selected - collecting user details...", style="cyan")
         
-        user_id = questionary.text(
-            "User ID (9 digits):",
-            validate=validate_user_id
-        ).ask()
+        user_id = None
+        while not user_id:
+            # Get user ID with basic format validation only
+            candidate_id = questionary.text(
+                "User ID (9 digits):",
+                validate=lambda text: (len(text.strip()) == 9 and text.strip().isdigit()) or "User ID must be exactly 9 digits"
+            ).ask()
+            
+            if not candidate_id:
+                break  # User cancelled
+                
+            # Check against API
+            console.print("Looking up user...", style="yellow")
+            success, user_data, error = get_user(candidate_id, config.api_key, config.base_url)
+            
+            if success:
+                # Extract name from API response
+                first_name = user_data.get('first_name', '')
+                last_name = user_data.get('last_name', '')
+                full_name = f"{first_name} {last_name}".strip()
+                
+                # Ask for confirmation
+                confirm = questionary.confirm(
+                    f"Found user: {full_name} (ID: {candidate_id}). Is this correct?"
+                ).ask()
+                
+                if confirm:
+                    user_id = candidate_id
+                else:
+                    console.print("Please enter a different user ID.", style="cyan")
+            else:
+                console.print(f"⚠️ User not found: {error}", style="yellow")
+                retry = questionary.confirm("Try a different user ID?").ask()
+                if not retry:
+                    break
+    
+        if user_id:  # Only proceed if we have a confirmed user ID
         
-        notify = questionary.confirm("Notify user on receiving activation?").ask()
-        hold = questionary.confirm("Hold item for user?").ask()
-        
-        conditional_data['interested_user'] = {
-            'user_id': user_id,
-            'notify': notify,
-            'hold': hold
-        }
+            notify = questionary.confirm("Notify user on receiving activation?").ask()
+            hold = questionary.confirm("Hold item for user?").ask()
+            
+            conditional_data['interested_user'] = {
+                'user_id': user_id,
+                'notify': notify,
+                'hold': hold
+            }
     
     # Collect additional notes if "Note" selected
     if "Note" in selected_categories:
@@ -383,6 +439,46 @@ def get_receiving_note_categories():
 # =============================================================================
 # VALIDATION FUNCTIONS
 # =============================================================================
+
+def get_user(uid, api_key, base_url):
+    
+    # API endpoint
+    url = f"{base_url}/almaws/v1/users/{uid}"
+    
+    # Parameters
+    params = {
+        'apikey': api_key,
+        'view': 'brief'
+    }
+    
+    # Headers
+    headers = {
+        'accept': 'application/json',
+        'Content-Type': 'application/json'
+    }
+    
+    try:
+        # Make the GET request
+        response = requests.get(
+            url, 
+            params=params,
+            headers=headers,
+            timeout=30
+        )
+        
+        # Check if request was successful
+        if response.status_code == 200 or response.status_code == 201:
+            return True, response.json(), None
+        else:
+            return False, None, f"HTTP {response.status_code}: {response.text}"
+            
+    except requests.exceptions.RequestException as e:
+        return False, None, f"Request error: {str(e)}"
+    except json.JSONDecodeError as e:
+        return False, None, f"JSON decode error: {str(e)}"
+    except Exception as e:
+        return False, None, f"Unexpected error: {str(e)}"
+
 
 def validate_price(text):
     """Validate price format and value."""
@@ -417,12 +513,6 @@ def validate_year(text):
         return "Year should be between 1400 and 2030"
     except ValueError:
         return "Please enter a valid year"
-
-def validate_user_id(text):
-    """Validate user ID format (exactly 9 digits)."""
-    if len(text.strip()) == 9 and text.strip().isdigit():
-        return True
-    return "User ID must be exactly 9 digits"
 
 def validate_receiving_categories(selected):
     """Validate receiving note category selections."""
@@ -700,6 +790,16 @@ def main():
     5. Summary display and confirmation
     6. File saving
     """
+    
+     # Load configuration from environment
+    try:
+        config = AlmaConfig.from_env()
+        print(f"✅ Configuration loaded successfully")
+        print(f"   Base URL: {config.base_url}")
+        print(f"   API Key: {config.api_key[:8]}{'*' * (len(config.api_key) - 8)}")  # Mask API key for security
+    except SystemExit:
+        return  # Exit if config loading failed
+    
     console.print(Panel.fit("📚 Generic PO Line Creator", style="bold blue"))
     
     # Load available templates
@@ -720,12 +820,12 @@ def main():
         
         # === DATA COLLECTION ===
         # Get basic order information
-        user_input = get_user_input()
+        user_input = get_user_input(config)
         if not user_input:
             continue
             
         # Get receiving note categories and conditional data
-        receiving_categories, conditional_data = get_receiving_note_categories()
+        receiving_categories, conditional_data = get_receiving_note_categories(config)
         
         # === PROCESSING ===
         # Apply user input to template
