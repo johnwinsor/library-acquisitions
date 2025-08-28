@@ -30,4 +30,6 @@ alma-create-pols = "library_acquisitions.alma_create_po_line:main"
 jlg-marc-to-json = "library_acquisitions.jlg_marc_to_json:main"
 amazon-pol-creator = "library_acquisitions.amazon_pol_creator:main"
 generic-pol-creator = "library_acquisitions.generic_pol_creator:main"
+edi-parser = "library_acquisitions.edi_parser:main"
+invoice-report = "library_acquisitions.invoice_report:main"
 
